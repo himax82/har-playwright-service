@@ -1,0 +1,65 @@
+package ru.idmt.harplaywright.harplaywright.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class GitService {
+
+    @Value("${gitlab.token}")
+    private String gitlabToken;
+
+    @Value("${gitlab.project-id}")
+    private String projectId;
+
+    public void pushToGitLab(String folderPath, String fileName, String fileContent) throws IOException {
+        if (folderPath.startsWith("/")) {
+            folderPath = folderPath.substring(1);
+        }
+        String filePath = folderPath + "/" + fileName;
+        if (filePath.startsWith("/")) {
+            filePath = filePath.substring(1);
+        }
+
+        // 2. URL для API
+        String url = "https://gitlab.id-mt.ru/api/v4/projects/" + projectId + "/repository/files/" +
+                URLEncoder.encode(filePath, StandardCharsets.UTF_8);
+
+        // 3. Тело запроса
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("branch", "devel");
+        payload.put("content", fileContent);
+        payload.put("commit_message", "feat: add auto-generated test from HAR");
+        payload.put("author_email", "m.pleskov@id-mt.ru");
+        payload.put("author_name", "Maksim Pleskov");
+
+        String jsonPayload = new ObjectMapper().writeValueAsString(payload);
+
+        // 4. Запрос
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("PRIVATE-TOKEN", gitlabToken);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(jsonPayload.getBytes(StandardCharsets.UTF_8));
+        }
+
+        int status = conn.getResponseCode();
+        if (status < 200 || status >= 300) {
+            String error = new String(conn.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+            throw new RuntimeException("GitLab API error (" + status + "): " + error);
+        }
+    }
+}

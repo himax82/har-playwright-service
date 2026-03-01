@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Генератор Playwright-тестов из HAR</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            line-height: 1.6;
+        }
+        .form-group { margin-bottom: 1.2rem; }
+        label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+        }
+        input, button {
+            padding: 0.6rem;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background: #0d6efd;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0b5ed7;
+        }
+        .message, .error {
+            padding: 1rem;
+            margin: 1.5rem 0;
+            border-radius: 4px;
+        }
+        .message {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Генерация Playwright-теста из HAR</h2>
+
+<form th:action="@{/run-and-save}" method="post" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="harFile">HAR-файл:</label>
+        <input type="file" id="harFile" name="harFile" accept=".har" required />
+    </div>
+
+    <div class="form-group">
+        <label for="folderPath">Папка в репозитории (например: <code>tests/sedo/FSK/API</code>):</label>
+        <input type="text" id="folderPath" name="folderPath"
+               th:value="${saveRequest?.folderPath}" required />
+    </div>
+
+    <div class="form-group">
+        <label for="fileName">Имя файла (например: <code>sedo9000.spec.ts</code>):</label>
+        <input type="text" id="fileName" name="fileName"
+               th:value="${saveRequest?.fileName}" required />
+    </div>
+
+    <button type="submit">Запустить проверку и сохранить в GitLab</button>
+</form>
+
+<!-- Сообщения -->
+<div th:if="${message}" class="message" th:text="${message}"></div>
+<div th:if="${error}" class="error" th:text="${error}"></div>
+
+</body>
+</html>
