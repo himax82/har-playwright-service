@@ -35,7 +35,6 @@ public class GitService {
             filePath = filePath.substring(1);
         }
 
-        // 2. URL для API
         String url = "https://gitlab.id-mt.ru/api/v4/projects/" + projectId + "/repository/files/" +
                 URLEncoder.encode(filePath, StandardCharsets.UTF_8);
 
@@ -47,7 +46,7 @@ public class GitService {
                 .append("})");
         String code = service.replaceMarker(sb.toString());
         code = code.replaceAll("request.post", "apiRequest.post");
-        // 3. Тело запроса
+
         Map<String, Object> payload = new HashMap<>();
         payload.put("branch", "devel");
         payload.put("content", code);
@@ -57,7 +56,6 @@ public class GitService {
 
         String jsonPayload = new ObjectMapper().writeValueAsString(payload);
 
-        // 4. Запрос
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
         conn.setRequestProperty("PRIVATE-TOKEN", gitlabToken);
