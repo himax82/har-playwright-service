@@ -1,6 +1,7 @@
 package ru.idmt.harplaywright.harplaywright.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +23,10 @@ public class GitService {
     @Value("${gitlab.project-id}")
     private String projectId;
 
-    public void pushToGitLab(String folderPath, String fileName, String fileContent) throws IOException {
+    @Autowired
+    private HarParserService service;
+
+    public void pushToGitLab(String folderPath, String fileName, String fileContent, String email, String fio) throws IOException {
         if (folderPath.startsWith("/")) {
             folderPath = folderPath.substring(1);
         }
@@ -35,13 +39,21 @@ public class GitService {
         String url = "https://gitlab.id-mt.ru/api/v4/projects/" + projectId + "/repository/files/" +
                 URLEncoder.encode(filePath, StandardCharsets.UTF_8);
 
+        StringBuilder sb = new StringBuilder();
+        sb.append("import { test, expect } from '@fixture/restApiContext'\n")
+                .append("import process from 'process'\n")
+                .append("test('Проверка ошибки', async ({ apiRequest }) => {\n")
+                .append(fileContent).append("\n")
+                .append("})");
+        String code = service.replaceMarker(sb.toString());
+        code = code.replaceAll("request.post", "apiRequest.post");
         // 3. Тело запроса
         Map<String, Object> payload = new HashMap<>();
         payload.put("branch", "devel");
-        payload.put("content", fileContent);
+        payload.put("content", code);
         payload.put("commit_message", "feat: add auto-generated test from HAR");
-        payload.put("author_email", "m.pleskov@id-mt.ru");
-        payload.put("author_name", "Maksim Pleskov");
+        payload.put("author_email", email);
+        payload.put("author_name", fio);
 
         String jsonPayload = new ObjectMapper().writeValueAsString(payload);
 

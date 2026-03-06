@@ -25,14 +25,14 @@ COPY --from=builder /app/target/*.jar app.jar
 # Копируем playwright-runner
 COPY playwright-runner ./playwright-runner
 
-# Устанавливаем Playwright
-RUN cd playwright-runner && npm install
-
-# Устанавливаем системные зависимости Playwright (браузеры)
+# Устанавливаем Playwright ВНУТРИ playwright-runner
+WORKDIR /app/playwright-runner
+RUN npm install
 RUN npx playwright install --with-deps
 
-# Порт приложения
+# Возвращаемся в корень приложения
+WORKDIR /app
+
 EXPOSE 8080
 
-# Запуск
 CMD ["java", "-jar", "app.jar"]

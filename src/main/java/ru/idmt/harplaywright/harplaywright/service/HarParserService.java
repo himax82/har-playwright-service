@@ -4,10 +4,10 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.lang3.text.StrSubstitutor;
 import org.apache.commons.text.StringSubstitutor;
 import org.springframework.stereotype.Service;
 import ru.idmt.harplaywright.harplaywright.model.HarEntrySummary;
+import ru.idmt.harplaywright.harplaywright.model.TestStep;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,62 +27,7 @@ public class HarParserService {
     private final Path runnerDir = Paths.get("playwright-runner").toAbsolutePath().normalize();
 
 
-    public String generateAndRunTestFromPath(File harFile) throws Exception {
-        if (!Files.exists(runnerDir)) {
-            throw new IllegalStateException("playwright-runner не найден: " + runnerDir);
-        }
-
-        try {
-            String testCode = generatePlaywrightTestForCheck(harFile);
-            Path testFile = Files.createTempFile(runnerDir, "test_", ".spec.ts");
-            try {
-                Files.writeString(testFile, testCode);
-
-                ProcessBuilder pb = new ProcessBuilder(
-                        "node", "node_modules/.bin/playwright", "test", testFile.getFileName().toString()
-                );
-                pb.redirectErrorStream(true);
-                pb.directory(new File(System.getProperty("user.dir")));
-                System.out.println("Запуск теста: " + testFile.toAbsolutePath());
-                System.out.println("Содержимое теста:\n" + testCode);
-                Process process = pb.start();
-                String logs = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-                process.waitFor();
-
-                return logs;
-            } finally {
-                Files.deleteIfExists(testFile);
-            }
-        } finally {
-            Files.deleteIfExists(harFile.toPath());
-        }
-    }
-
-    public String generatePlaywrightTestToUpload(File harFile) throws IOException {
-        List<HarEntrySummary> results = new ArrayList<>();
-        try {
-            parseHarStreaming(harFile, results::add);
-            StringBuilder sb = new StringBuilder();
-            sb.append("import { test, expect } from '@fixture/restApiContext'\n")
-                    .append("import process from 'process'\n")
-                    .append("test('Проверка ошибки', async ({ apiRequest }) => {\n");
-            for (HarEntrySummary entry : results) {
-                if (entry.getRequestJson() != null) {
-                    writeTest(entry.getUrl(), entry.getRequestJson(), entry.getResponseJson(), sb, true);
-                }
-            }
-            sb.append("})");
-            return sb.toString();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    public String generatePlaywrightTestForCheck(File harFile) throws IOException {
-        List<HarEntrySummary> results = new ArrayList<>();
-        parseHarStreaming(harFile, results::add);
-
+    public String assembleAndRunTest(List<TestStep> steps) throws Exception {
         StringBuilder sb = new StringBuilder();
         sb.append("import { test as base, expect } from '@playwright/test';\n")
                 .append("\n")
@@ -91,7 +36,7 @@ public class HarParserService {
                 .append("    async ({}, use) => {\n")
                 .append("      const request = await base.request.newContext({\n")
                 .append("        ignoreHTTPSErrors: true,\n")
-                .append("        baseURL: '").append(getBaseUrlFromFirstUrl(results.iterator().next().getUrl())).append("'\n")
+                .append("        baseURL: '").append(getBaseUrlFromFirstUrl(steps.iterator().next().getUrl())).append("'\n")
                 .append("      });\n")
                 .append("      await use(request);\n")
                 .append("      await request.dispose();\n")
@@ -100,20 +45,71 @@ public class HarParserService {
                 .append("  ],\n")
                 .append("});\n\n")
                 .append("test('Сгенерированный тест из HAR', async ({ request }) => {\n");
-        Map<String, String> urlPWMap = new LinkedHashMap<>();
 
-        for (HarEntrySummary entry : results) {
-            if (entry.getRequestJson() != null) {
-                StringBuilder partSb = new StringBuilder();
-                writeTest(entry.getUrl(), entry.getRequestJson(), entry.getResponseJson(), partSb, false);
-                String path = getUrlPath(entry.getUrl());
-                urlPWMap.put(path, partSb.toString());
-            }
+        for (TestStep step : steps) {
+            sb.append(step.getTestCode()).append("\n");
         }
-
         sb.append("});\n");
-        StringSubstitutor substitutor = new StringSubstitutor(METHOD_NAME_CONST);
-        return substitutor.replace(sb.toString());
+
+        String code = replaceMarker(sb.toString());
+
+        Path testFile = Files.createTempFile(runnerDir, "selected_", ".spec.ts");
+        Files.writeString(testFile, code);
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                    "npx", "playwright", "test", testFile.getFileName().toString()
+            );
+            pb.redirectErrorStream(true);
+            pb.directory(runnerDir.toFile());
+            System.out.println("Запуск теста: " + testFile.toAbsolutePath());
+            Process process = pb.start();
+            String logs = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            process.waitFor();
+            return logs;
+        } finally {
+            Files.deleteIfExists(testFile);
+        }
+    }
+
+    public String replaceMarker(String code) {
+        StringSubstitutor substitutor = new StringSubstitutor(key -> METHOD_NAME_CONST.getOrDefault(key, ""));
+        return substitutor.replace(code);
+    }
+
+    public void clearState() {
+        NAME_METHOD.clear();
+        VALUE_ID.clear();
+        METHOD_NAME_CONST.clear();
+    }
+
+    public void writeTestForPreview(String url, Object req, Object resp, StringBuilder sb) {
+        String name = null;
+        if (isUrlContainId((url))) {
+            String path = getUrlWithId(url);
+            name = getNameResponse(getUrlPath(url));
+            sb.append("const ").append(name).append(" = ")
+                    .append(path).append("\n");
+        }
+        String path = getUrlPath(url);
+        String methodName = getNameResponse(path);
+
+        sb.append("const ").append(methodName)
+                .append(" = await request.post('");
+        if (name == null) {
+            sb.append(path).append("', {\n");
+        } else {
+            sb.append(name).append(", {\n");
+        }
+        sb.append("  data: ");
+        printRequest(req, sb, false);
+        sb.append("});\n")
+                .append("await expect(").append(methodName).append(", 'Успешный запрос').toBeOK();\n");
+
+        if (resp != null) {
+            sb.append("${").append(methodName).append("Json}");
+            responseHandler(resp, new StringBuilder(methodName + "Json"));
+        }
     }
 
     private String getBaseUrlFromFirstUrl(String fullUrl) {
@@ -124,39 +120,6 @@ public class HarParserService {
                     (uri.getPort() != -1 ? ":" + uri.getPort() : "");
         } catch (Exception e) {
             return "https://192.168.42.201";
-        }
-    }
-
-    private void writeTest(String url, Object objRequest, Object objResponse, StringBuilder builder, boolean isUpload) {
-        String name = null;
-        if (isUrlContainId((url))) {
-            String path = getUrlWithId(url);
-            name = getNameResponse(getUrlPath(url));
-            builder.append("const ").append(name).append(" = ")
-                    .append(path).append("\n");
-        }
-        builder.append("const ");
-        String path = getUrlPath(url);
-        String methoName = getNameResponse(path);
-        builder.append(methoName);
-        if (isUpload) {
-            builder.append(" = await apiRequest.post(");
-        } else {
-            builder.append(" = await request.post(");
-        }
-        if (name == null) {
-            builder.append("'").append(path).append("', {\n");
-        } else {
-            builder.append(name).append(", {\n");
-        }
-        builder.append("data: ");
-        printRequest(objRequest, builder, false);
-        builder.append("})\n")
-                .append("await expect(").append(methoName).append(", 'Успешный запрос').toBeOK()\n");
-
-        if (objResponse != null) {
-            builder.append("${").append(methoName).append("Json}");
-            responseHandler(objResponse, new StringBuilder(methoName + "Json"));
         }
     }
 
@@ -228,7 +191,7 @@ public class HarParserService {
         if (!METHOD_NAME_CONST.containsKey(methodName)) {
             String constantMethod = "const " + methodName + " = await "
                     + methodName.replace("Json", ".json()\n") + "\n";
-            METHOD_NAME_CONST.put(methodName + "Json", constantMethod);
+            METHOD_NAME_CONST.put(methodName, constantMethod);
         }
     }
 
@@ -273,7 +236,7 @@ public class HarParserService {
         return value.length() == 16 || value.length() == 36 || value.startsWith("file");
     }
 
-    private String getUrlPath(String url) {
+    public String getUrlPath(String url) {
         String[] parts = url.split("/", 4);
         return parts.length > 3 ? "/" + parts[3] : "/";
     }

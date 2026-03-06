@@ -3,16 +3,14 @@ package ru.idmt.harplaywright.harplaywright.model;
 public class TestStep {
     private String url;
     private String path;
-    private String generatedCode;
-    private String editedCode;
+    private String testCode;
     private boolean selected;
 
     // Конструктор, геттеры, сеттеры
     public TestStep(String url, String path, String code) {
         this.url = url;
         this.path = path;
-        this.generatedCode = code;
-        this.editedCode = code;
+        this.testCode = code;
         this.selected = false;
     }
 
@@ -32,20 +30,12 @@ public class TestStep {
         this.path = path;
     }
 
-    public String getGeneratedCode() {
-        return generatedCode;
+    public String getTestCode() {
+        return testCode;
     }
 
-    public void setGeneratedCode(String generatedCode) {
-        this.generatedCode = generatedCode;
-    }
-
-    public String getEditedCode() {
-        return editedCode;
-    }
-
-    public void setEditedCode(String editedCode) {
-        this.editedCode = editedCode;
+    public void setTestCode(String generatedCode) {
+        this.testCode = generatedCode;
     }
 
     public boolean isSelected() {

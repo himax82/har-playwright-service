@@ -1,82 +1,599 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Генератор Playwright-тестов из HAR</title>
+    <title>Парсинг HAR в Playwright-тест</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-            line-height: 1.6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
         }
-        .form-group { margin-bottom: 1.2rem; }
-        label {
-            display: block;
-            margin-bottom: 0.4rem;
-            font-weight: 600;
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+            overflow: hidden;
         }
-        input, button {
-            padding: 0.6rem;
-            width: 100%;
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        button {
-            background: #0d6efd;
+
+        header {
+            text-align: center;
+            padding: 32px 20px;
+            background: #1e70bf;
             color: white;
-            font-weight: bold;
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 28px;
+        }
+
+        .sticky-panel {
+            transition: top 0.25s ease;
+            position: absolute;
+            right: 24px;
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .upload-section {
+            padding: 24px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+
+        .file-input-wrapper {
+            display: inline-block;
+            position: relative;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
             cursor: pointer;
         }
-        button:hover {
-            background: #0b5ed7;
+
+        .custom-file-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: #1e70bf;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
         }
-        .message, .error {
-            padding: 1rem;
-            margin: 1.5rem 0;
-            border-radius: 4px;
+
+        .custom-file-btn:hover {
+            background: #155a96;
         }
-        .message {
-            background: #d4edda;
-            color: #155724;
+
+        .custom-file-btn::before {
+            content: "📄";
+            font-size: 18px;
         }
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            white-space: pre-wrap;
+
+        .btn-process {
+            margin-top: 12px;
+            padding: 12px 32px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn-process:hover {
+            background: #1e7733;
+        }
+
+        .sections {
+            position: relative; /* важно для absolute внутри */
+            display: flex;
+            gap: 24px;
+            padding: 24px;
+        }
+
+        .url-list {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .code-panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            height: fit-content;
+            max-height: 70vh; /* чтобы не уходил за экран */
+            overflow-y: auto; /* скролл внутри, если код длинный */
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #2c3e50;
+        }
+
+        .url-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fff;
+        }
+
+        .url-item:hover {
+            background: #f1f7ff;
+        }
+
+        .url-item.selected {
+            background: #e3f2fd;
+            border-left: 4px solid #1e70bf;
+            font-weight: 500;
+        }
+
+        textarea {
+            width: 100%;
+            height: 320px;
+            padding: 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: vertical;
+            background: #fafafa;
+        }
+
+        .editor-actions {
+            margin-top: 12px;
+            text-align: right;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+
+        .btn-save {
+            background: #4a6cf7;
+            color: white;
+        }
+
+        .btn-save:hover {
+            background: #3a5ae5;
+        }
+
+        .btn-run {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-run:hover {
+            background: #1e7733;
+        }
+
+        .btn-git {
+            background: #8e44ad;
+            color: white;
+        }
+
+        .btn-git:hover, .btn-git:disabled {
+            background: #7a3a9a;
+            cursor: not-allowed;
+        }
+
+        .git-form {
+            margin-top: 24px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .git-form label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .git-form input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .git-form input:focus {
+            border-color: #1e70bf;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(30, 115, 190, 0.2);
+        }
+
+        .action-footer {
+            text-align: right;
+            margin: 32px 0 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        /* Тост */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: 500;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transform: translateX(200%);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .url-header {
+            position: sticky;
+            top: 0;
+            background: white;
+            padding-bottom: 12px;
+            z-index: 10;
+        }
+
+        .btn-clear {
+            background: #dc3545;
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .btn-clear:hover {
+            background: #b02a37;
+        }
+
+        @media (max-width: 768px) {
+            .sections { flex-direction: column; }
+            .editor-actions, .action-footer, .git-form { text-align: center; }
+            .btn { margin: 4px; display: inline-block; }
         }
     </style>
 </head>
 <body>
 
-<h2>Генерация Playwright-теста из HAR</h2>
+<div class="container">
+    <header>
+        <h1>Парсинг HAR в Playwright-тест</h1>
+    </header>
 
-<form th:action="@{/run-and-save}" method="post" enctype="multipart/form-data">
-    <div class="form-group">
-        <label for="harFile">HAR-файл:</label>
-        <input type="file" id="harFile" name="harFile" accept=".har" required />
+    <div class="upload-section">
+        <div class="file-input-wrapper">
+            <button class="custom-file-btn" id="chooseFileBtn">Выберите HAR-файл</button>
+            <input type="file" id="harFileInput" accept=".har" />
+        </div>
+        <button class="btn-process" id="processBtn">Обработать</button>
+        <button class="btn-process" style="background:#6c757d;" id="clearBtn">Очистить</button>
     </div>
 
-    <div class="form-group">
-        <label for="folderPath">Папка в репозитории (например: <code>tests/sedo/FSK/API</code>):</label>
-        <input type="text" id="folderPath" name="folderPath"
-               th:value="${saveRequest?.folderPath}" required />
+    <div class="sections" id="sections" style="display:none;">
+        <div class="url-list">
+            <div class="url-header">
+                <h2 class="section-title">URL-адреса</h2>
+                <button class="btn btn-clear" id="clearSelectionBtn">
+                    ❌ Снять выделение
+                </button>
+            </div>
+
+            <div id="urls"></div>
+            <div id="emptyUrls" class="empty-state">
+                Загрузите HAR-файл, чтобы увидеть список запросов
+            </div>
+        </div>
+        <div class="sticky-panel">
+        <div class="code-panel">
+            <h2 class="section-title">Код для выбранного URL</h2>
+            <textarea id="codeEditor" placeholder="Выберите URL слева для просмотра кода"></textarea>
+            <div class="editor-actions">
+                <button class="btn btn-save" id="saveBtn" disabled>Сохранить изменения</button>
+            </div>
+        </div>
+            </div>
     </div>
 
-    <div class="form-group">
-        <label for="fileName">Имя файла (например: <code>sedo9000.spec.ts</code>):</label>
-        <input type="text" id="fileName" name="fileName"
-               th:value="${saveRequest?.fileName}" required />
+    <div class="action-footer">
+        <button class="btn btn-run" id="runBtn" disabled>Проверить выбранные</button>
     </div>
 
-    <button type="submit">Запустить проверку и сохранить в GitLab</button>
-</form>
+    <!-- Блок с результатами и формой Git -->
+    <div id="gitSection" style="display:none;">
+        <div class="section-title">Результат проверки</div>
+        <div id="testResult" style="background:#f8f9fa;padding:16px;border-radius:6px;margin-bottom:20px;"></div>
 
-<!-- Сообщения -->
-<div th:if="${message}" class="message" th:text="${message}"></div>
-<div th:if="${error}" class="error" th:text="${error}"></div>
+        <div class="git-form">
+            <label for="gitFolder">Папка в репозитории (например: <code>tests/sedo/FSK/API</code>)</label>
+            <input type="text" id="gitFolder" placeholder="tests/sedo">
+
+            <label for="gitFileName">Имя файла (например: <code>my_test.spec.ts</code>)</label>
+            <input type="text" id="gitFileName" placeholder="my_test.spec.ts">
+            <label for="email">Email</label>
+            <input type="text" id="email" placeholder="ivanov@id-mt.ru">
+            <label for="fio">ФИО</label>
+            <input type="text" id="fio" placeholder="Иванов Иван Иванович">
+            <button class="btn btn-git" id="saveToGitBtn" disabled>📦 Сохранить в GitLab</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    let steps = [];
+    let selectedIndices = new Set();
+    let currentUrlIndex = -1;
+    let finalTestCode = '';
+
+    // === Тост ===
+    function showToast(msg, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.className = `toast ${type}`;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // === Инициализация ===
+    document.getElementById('chooseFileBtn').onclick = () => document.getElementById('harFileInput').click();
+    document.getElementById('harFileInput').onchange = () => {
+        document.getElementById('processBtn').disabled = false;
+    };
+
+    // === Обработка загрузки HAR ===
+    document.getElementById('processBtn').onclick = async () => {
+        const file = document.getElementById('harFileInput').files[0];
+        if (!file) return alert("Выберите файл");
+
+        const formData = new FormData();
+        formData.append('harFile', file);
+
+        try {
+            const res = await fetch('/parse-har-steps', {
+                method: 'POST',
+                body: formData
+            });
+            steps = await res.json();
+
+            if (steps.length === 0) {
+                document.getElementById('emptyUrls').style.display = 'block';
+                document.getElementById('urls').innerHTML = '';
+                return;
+            }
+
+            document.getElementById('emptyUrls').style.display = 'none';
+            document.getElementById('sections').style.display = 'flex';
+
+            const urlsDiv = document.getElementById('urls');
+            urlsDiv.innerHTML = steps.map((step, i) =>
+                `<div class="url-item" data-index="${i}">${step.url}</div>`
+            ).join('');
+
+            // Обработчики кликов
+            document.querySelectorAll('.url-item').forEach(item => {
+                item.addEventListener('click', function () {
+                    const index = parseInt(this.dataset.index);
+                    const isSelected = selectedIndices.has(index);
+
+                    if (isSelected) {
+                        selectedIndices.delete(index);
+                        this.classList.remove('selected');
+                    } else {
+                        selectedIndices.add(index);
+                        this.classList.add('selected');
+                    }
+
+                    currentUrlIndex = index;
+                    document.getElementById('codeEditor').value =
+                        steps[index].testCode || 'Нет сгенерированного кода';
+
+                    document.getElementById('saveBtn').disabled = false;
+                    document.getElementById('runBtn').disabled =
+                        selectedIndices.size === 0;
+
+                    // 🔥 вот это главное
+                    moveCodePanelNearElement(this);
+                });
+            });
+
+        } catch (err) {
+            showToast("Ошибка при парсинге HAR: " + err.message, 'error');
+            console.error(err);
+        }
+    };
+
+    function moveCodePanelNearElement(element) {
+        const panel = document.querySelector('.sticky-panel');
+        const container = document.querySelector('.sections');
+
+        const containerRect = container.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+
+        const topOffset =
+            elementRect.top - containerRect.top + container.scrollTop;
+
+        panel.style.top = topOffset + 'px';
+    }
+
+    // === Сохранить изменения ===
+    document.getElementById('saveBtn').onclick = () => {
+        if (currentUrlIndex !== -1) {
+            steps[currentUrlIndex].testCode = document.getElementById('codeEditor').value;
+            steps[currentUrlIndex].selected = true;
+            showToast("✅ Изменения сохранены для этого URL");
+        }
+    };
+
+    document.getElementById('clearSelectionBtn').onclick = () => {
+        selectedIndices.clear();
+
+        document.querySelectorAll('.url-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+
+        document.getElementById('runBtn').disabled = true;
+
+        showToast("Выделение снято со всех URL");
+    };
+
+    // === Проверить выбранные ===
+    document.getElementById('runBtn').onclick = async () => {
+        const selectedSteps = steps.filter((_, i) => selectedIndices.has(i));
+        if (selectedSteps.length === 0) {
+            showToast("Выберите хотя бы один URL", 'error');
+            return;
+        }
+
+        try {
+            const res = await fetch('/run-selected-steps', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(selectedSteps)
+            });
+            const data = await res.json();
+
+            const resultEl = document.getElementById('testResult');
+            resultEl.innerHTML = `<pre style="white-space:pre-wrap;">${data.logs}</pre>`;
+            document.getElementById('gitSection').style.display = 'block';
+
+            if (data.success) {
+                showToast("✅ Тест пройден!", 'success');
+                // Генерируем полный код
+                finalTestCode = selectedSteps.map(s => s.testCode).join('\n');
+
+                // Включаем форму Git
+                document.getElementById('saveToGitBtn').disabled = true;
+                document.getElementById('gitFolder').oninput = validateGitForm;
+                document.getElementById('gitFileName').oninput = validateGitForm;
+                document.getElementById('email').oninput = validateGitForm;
+                document.getElementById('fio').oninput = validateGitForm;
+
+            } else {
+                showToast("❌ Тест не прошёл", 'error');
+                document.getElementById('saveToGitBtn').disabled = true;
+            }
+
+        } catch (err) {
+            showToast("Ошибка при запуске теста: " + err.message, 'error');
+        }
+    };
+
+    document.getElementById('clearBtn').onclick = async () => {
+        // Сброс фронтенда
+        steps = [];
+        selectedIndices.clear();
+        currentUrlIndex = -1;
+        finalTestCode = '';
+
+        document.getElementById('harFileInput').value = '';
+        document.getElementById('codeEditor').value = '';
+        document.getElementById('urls').innerHTML = '';
+        document.getElementById('emptyUrls').style.display = 'block';
+        document.getElementById('sections').style.display = 'none';
+        document.getElementById('gitSection').style.display = 'none';
+        document.getElementById('saveBtn').disabled = true;
+        document.getElementById('runBtn').disabled = true;
+
+        // Сброс бэкенда
+        try {
+            await fetch('/clear', { method: 'POST' });
+            showToast("✅ Состояние сброшено");
+        } catch (err) {
+            showToast("⚠️ Ошибка сброса: " + err.message, 'error');
+        }
+    };
+
+    // === Валидация формы Git ===
+    function validateGitForm() {
+        const folder = document.getElementById('gitFolder').value.trim();
+        const fileName = document.getElementById('gitFileName').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const fio = document.getElementById('fio').value.trim();
+        const btn = document.getElementById('saveToGitBtn');
+        btn.disabled = !folder || !fileName || !email || !fio;
+    }
+
+    // === Сохранить в GitLab ===
+    document.getElementById('saveToGitBtn').onclick = async () => {
+        const folder = document.getElementById('gitFolder').value.trim();
+        const file = document.getElementById('gitFileName').value.trim();
+        const email = document.getElementById('email').value.trim();
+        const fio = document.getElementById('fio').value.trim();
+
+        try {
+            const res = await fetch('/save-to-git', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    folderPath: folder,
+                    fileName: file,
+                    testCode: finalTestCode,
+                    email: email,
+                    fio: fio
+                })
+            });
+
+            if (res.ok) {
+                showToast("✅ Тест сохранён в GitLab!", 'success');
+                // Сброс формы
+                document.getElementById('gitFolder').value = '';
+                document.getElementById('gitFileName').value = '';
+                document.getElementById('email').value = '';
+                document.getElementById('fio').value = '';
+                document.getElementById('saveToGitBtn').disabled = true;
+            } else {
+                const err = await res.text();
+                showToast("❌ Ошибка GitLab: " + err, 'error');
+            }
+        } catch (err) {
+            showToast("Сеть: " + err.message, 'error');
+        }
+    };
+</script>
 
 </body>
 </html>
