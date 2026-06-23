@@ -95,11 +95,11 @@ public class HarParserService {
         String methodName = getNameResponse(path);
 
         sb.append("const ").append(methodName)
-                .append(" = await request.post('");
+                .append(" = await request.post(");
         if (name == null) {
-            sb.append(path).append("', {\n");
+            sb.append("'").append(path).append("', {\n");
         } else {
-            sb.append(name).append("', {\n");
+            sb.append(name).append(", {\n");
         }
         sb.append("  data: ");
         printRequest(req, sb, false);
