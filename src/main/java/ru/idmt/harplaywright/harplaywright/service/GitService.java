@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import ru.idmt.harplaywright.harplaywright.exception.GitLabApiException;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -68,8 +70,11 @@ public class GitService {
 
         int status = conn.getResponseCode();
         if (status < 200 || status >= 300) {
-            String error = new String(conn.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
-            throw new RuntimeException("GitLab API error (" + status + "): " + error);
+            InputStream es = conn.getErrorStream();
+            String error = es != null
+                    ? new String(es.readAllBytes(), StandardCharsets.UTF_8)
+                    : "(no error body)";
+            throw new GitLabApiException(status, error);
         }
     }
 }

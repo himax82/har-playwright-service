@@ -99,7 +99,7 @@ public class HarParserService {
         if (name == null) {
             sb.append(path).append("', {\n");
         } else {
-            sb.append(name).append(", {\n");
+            sb.append(name).append("', {\n");
         }
         sb.append("  data: ");
         printRequest(req, sb, false);
